@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
+using System.Linq;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace FileUploader.Models
 {
@@ -17,26 +20,62 @@ namespace FileUploader.Models
 
         public Task Initialize()
         {
-            // Add Initialize code here
-            throw new NotImplementedException();
+            // Create container if not exists.
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConfig.ConnectionString);
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            CloudBlobContainer container = blobClient.GetContainerReference(storageConfig.FileContainerName);
+
+            return container.CreateIfNotExistsAsync();
         }
 
         public Task Save(Stream fileStream, string name)
+        //save a single blob from a stream
         {
-            // Add Save code here
-            throw new NotImplementedException();
+            //prepare container
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConfig.ConnectionString);
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            CloudBlobContainer container = blobClient.GetContainerReference(storageConfig.FileContainerName);
+            
+            // Get blob reference from name.
+            CloudBlockBlob blockBlob = container.GetBlockBlobReference(name);
+            //actual save
+            return blockBlob.UploadFromStreamAsync(fileStream);
         }
 
-        public Task<IEnumerable<string>> GetNames()
+        public async Task<IEnumerable<string>> GetNames()
+        //Get all blob names.
         {
-            // Add GetNames code here
-            throw new NotImplementedException();
+            List<string> names = new List<string>();
+
+            //prepare container (again?)
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConfig.ConnectionString);
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            CloudBlobContainer container = blobClient.GetContainerReference(storageConfig.FileContainerName);
+
+            //prepare api call
+            BlobContinuationToken continuationToken = null;
+            BlobResultSegment resultSegment = null;
+
+            //Call api, read names and append
+            do
+            {
+                resultSegment = await container.ListBlobsSegmentedAsync(continuationToken);
+                names.AddRange(resultSegment.Results.OfType<ICloudBlob>().Select(b => b.Name));
+                continuationToken = resultSegment.ContinuationToken;
+            } while (continuationToken != null);
+
+            return names;
         }
 
         public Task<Stream> Load(string name)
+        //Load a single blob as stream
         {
-            // Add Load code here
-            throw new NotImplementedException();
+            //prepare... again. lol bad coding in an MSLearn project? inconceivable!
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConfig.ConnectionString);
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            CloudBlobContainer container = blobClient.GetContainerReference(storageConfig.FileContainerName);
+            //actual load
+            return container.GetBlobReference(name).OpenReadAsync();
         }
     }
 }
